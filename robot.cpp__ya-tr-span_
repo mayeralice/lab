@@ -1,0 +1,64 @@
+#include "robot.hpp"
+#include <iostream>
+#include <sstream>
+#include <chrono>
+#include <thread>
+
+Robot::Robot() : engineOn(false), honeyEatenCount(0) {}
+
+void Robot::enableEngine() {
+    if (!engineOn) {
+        engineOn = true;
+        std::cout << "[Robot] Двигатель включён.\n";
+    } else {
+        std::cout << "[Robot] Двигатель уже работает.\n";
+    }
+}
+
+void Robot::disableEngine() {
+    if (engineOn) {
+        engineOn = false;
+        std::cout << "[Robot] Двигатель выключен.\n";
+    } else {
+        std::cout << "[Robot] Двигатель и так выключен.\n";
+    }
+}
+
+bool Robot::checkHoneyNearby() const {
+   
+    static int callCount = 0;
+    callCount++;
+    bool hasHoney = (callCount % 3 != 0); // для демонстрации
+    if (hasHoney)
+        std::cout << "[Датчик] Мёд обнаружен!\n";
+    else
+        std::cout << "[Датчик] Мёда нет рядом.\n";
+    return hasHoney;
+}
+
+void Robot::eatHoney() {
+    std::cout << "[Robot] Попытка съесть мёд...\n";
+    if (!checkHoneyNearby()) {
+        std::cout << "[Robot] Не могу съесть мёд: поблизости ничего нет.\n";
+        return;
+    }
+ 
+    if (!engineOn) {
+        std::cout << "[Robot] Включаю двигатель для подъезда.\n";
+        enableEngine();
+    }
+    std::cout << "[Robot] Еду к месту с мёдом...\n";
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    honeyEatenCount++;
+    std::cout << "[Robot] Мёд съеден! Всего съедено: " << honeyEatenCount << "\n";
+
+}
+
+std::string Robot::generateReport() const {
+    std::ostringstream oss;
+    oss << "=== Отчёт о работе робота ===\n"
+        << "Состояние двигателя: " << (engineOn ? "включён" : "выключен") << "\n"
+        << "Количество съеденного мёда: " << honeyEatenCount << "\n"
+        << "==============================\n";
+    return oss.str();
+}
