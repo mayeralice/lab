@@ -1,0 +1,101 @@
+#include "httplib.h"
+  #include <mosquitto.h>
+  #include <iostream>
+  #include <string>
+  #include <cstring>
+  
+  using namespace httplib;
+  
+  // Глобальный MQTT клиент
+  struct mosquitto* mosq = nullptr;
+  
+  // Отправка MQTT сообщения
+  void mqtt_publish(const std::string& topic, const std::string& message) {
+      if (mosq) {
+          int rc = mosquitto_publish(mosq, nullptr, topic.c_str(),
+                                     message.size(), message.c_str(), 0, false);
+          if (rc == 0) {
+              std::cout << "[MQTT] Published to " << topic << ": " << message << std::endl;
+          } else {
+              std::cerr << "[MQTT] Publish failed: " << rc << std::endl;
+          }
+      }
+  }
+  
+  int main() {
+      std::cout << "========================================" << std::endl;
+      std::cout << "   Lab4: REST + MQTT Server" << std::endl;
+      std::cout << "========================================" << std::endl;
+      
+      // 1. Инициализация MQTT
+      mosquitto_lib_init();
+      mosq = mosquitto_new("rest_server", true, nullptr);
+      if (!mosq) {
+          std::cerr << "Failed to create MQTT client" << std::endl;
+          return 1;
+      }
+      
+      // 2. Подключение к MQTT брокеру
+      int rc = mosquitto_connect(mosq, "localhost", 1883, 60);
+      if (rc != 0) {
+          std::cerr << "MQTT connect failed: " << rc << std::endl;
+          return 1;
+      }
+      std::cout << "[MQTT] Connected to localhost:1883" << std::endl;
+      
+      // 3. Запуск MQTT фонового цикла
+      mosquitto_loop_start(mosq);
+      
+      // 4. Создание REST сервера
+      Server svr;
+      
+      // GET /ping — проверка работы
+      svr.Get("/ping", [](const Request& req, Response& res) {
+          res.set_content(R"({"status": "alive", "message": "REST server is running"})",
+                         "application/json");
+          std::cout << "[REST] GET /ping" << std::endl;
+      });
+      
+      // POST /command — приём команды
+      svr.Post("/command", [](const Request& req, Response& res) {
+          std::cout << "[REST] POST /command" << std::endl;
+          std::cout << "[REST] Body: " << req.body << std::endl;
+          
+          // Публикуем в MQTT
+          mqtt_publish("robot/command", req.body);
+          
+          res.set_content(R"({"status": "ok", "mqtt": "published"})",
+                         "application/json");
+      });
+      
+      // GET /help — справка
+      svr.Get("/help", [](const Request& req, Response& res) {
+          std::string help = R"({
+              "endpoints": {
+                  "GET /ping": "Check server status",
+                  "POST /command": "Send command to robot (body: forward 1000)",
+                  "GET /help": "Show this help"
+              },
+              "example": {
+                  "command": "forward",
+                  "time_ms": 1000
+              }
+          })";
+          res.set_content(help, "application/json");
+      });
+      
+      // 5. Запуск сервера
+      std::cout << "[REST] Starting server on http://localhost:8080" << std::endl;
+      std::cout << "[REST] Available endpoints: /ping, /command, /help" << std::endl;
+      std::cout << "========================================" << std::endl;
+      std::cout << "Waiting for HTTP requests..." << std::endl;
+      
+      svr.listen("localhost", 8080);
+      
+      // 6. Очистка (сюда не дойдём, пока сервер не остановлен)
+      mosquitto_loop_stop(mosq, true);
+      mosquitto_destroy(mosq);
+      mosquitto_lib_cleanup();
+      
+      return 0;
+  }
