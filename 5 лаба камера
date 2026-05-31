@@ -1,0 +1,51 @@
+  #include <opencv2/opencv.hpp>
+  #include <iostream>
+  #include <cstdlib>
+  
+  int main() {
+      cv::VideoCapture cap(0);
+      if (!cap.isOpened()) return 1;
+      
+      cv::Mat frame, gray, binary;
+      
+      while (true) {
+          cap >> frame;
+          if (frame.empty()) break;
+          
+          cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+          cv::threshold(gray, binary, 100, 255, cv::THRESH_BINARY_INV);
+          
+          std::vector<std::vector<cv::Point>> contours;
+          cv::findContours(binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+          
+          for (const auto& cnt : contours) {
+              if (cv::contourArea(cnt) < 500) continue;
+              
+              cv::Rect r = cv::boundingRect(cnt);
+              cv::Point c(r.x + r.width/2, r.y + r.height/2);
+              cv::Point fc(frame.cols/2, frame.rows/2);
+              
+              double angle = (double)(c.x - fc.x) / frame.cols * 60.0;
+              double dist = 5000.0 / r.width;
+              
+              cv::rectangle(frame, r, cv::Scalar(0,255,0), 2);
+              cv::circle(frame, c, 5, cv::Scalar(0,0,255), -1);
+              
+              char cmd[256];
+              if (abs(angle) > 10) {
+                  const char* dir = (angle > 0) ? "right" : "left";
+                  snprintf(cmd, sizeof(cmd), "ssh user@192.168.1.101 'sudo /home/user/zubkowaalekseeva/robot %s 300'", dir);
+              } else if (dist > 30) {
+                  snprintf(cmd, sizeof(cmd), "ssh user@192.168.1.101 'sudo /home/user/zubkowaalekseeva/robot forward %d'", (int)(dist * 15));
+              } else {
+                  snprintf(cmd, sizeof(cmd), "ssh user@192.168.1.101 'sudo /home/user/zubkowaalekseeva/robot stop'");
+              }
+              system(cmd);
+              cv::waitKey(500);
+          }
+          
+          cv::imshow("Vision", frame);
+          if (cv::waitKey(30) == 'q') break;
+      }
+      return 0;
+  }
